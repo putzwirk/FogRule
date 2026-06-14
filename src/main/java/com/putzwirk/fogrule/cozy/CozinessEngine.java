@@ -1,6 +1,7 @@
 package com.putzwirk.fogrule.cozy;
 
 import com.putzwirk.fogrule.FogRule;
+import com.putzwirk.fogrule.FogRuleConfig;
 import com.putzwirk.fogrule.abandoned.DecayContext;
 import com.putzwirk.fogrule.abandoned.DecayRule;
 import com.putzwirk.fogrule.abandoned.DecayRules;
@@ -43,8 +44,13 @@ import java.util.Set;
 @EventBusSubscriber(modid = FogRule.MODID)
 public class CozinessEngine {
 
-    public static final float MINIMUM_COZINESS_THRESHOLD = 20.0f;
-    private static final long DECAY_TRIGGER_TICKS = 240L;
+    private static long getDecayTriggerTicks() {
+        return FogRuleConfig.DECAY_TRIGGER_TICKS.get();
+    }
+
+    private static float getMinimumCozinessThreshold() {
+        return FogRuleConfig.MINIMUM_COZINESS_THRESHOLD.get().floatValue();
+    }
 
     private static final Deque<PendingDecay> pendingDecayQueue = new ArrayDeque<>();
     private static final Set<ChunkPos> queuedDecayPositions = new HashSet<>();
@@ -80,7 +86,7 @@ public class CozinessEngine {
                 long simulatedLastVisited = currentTime - simulatedTicksPassed;
                 data.setLastVisitedTime(simulatedLastVisited);
 
-                if (simulatedTicksPassed >= DECAY_TRIGGER_TICKS && !queuedDecayPositions.contains(cPos)) {
+                if (simulatedTicksPassed >= getDecayTriggerTicks() && !queuedDecayPositions.contains(cPos)) {
                     pendingDecayQueue.add(new PendingDecay(cPos, simulatedTicksPassed, data.getAbandonedCoziness()));
                     queuedDecayPositions.add(cPos);
                 }
@@ -284,7 +290,7 @@ public class CozinessEngine {
             return;
         }
 
-        if (lastVisited > 0L && elapsed >= DECAY_TRIGGER_TICKS && !data.getPackedPositions().isEmpty()) {
+        if (lastVisited > 0L && elapsed >= getDecayTriggerTicks() && !data.getPackedPositions().isEmpty()) {
             ChunkPos cPos = chunk.getPos();
             if (!queuedDecayPositions.contains(cPos)) {
                 pendingDecayQueue.add(new PendingDecay(cPos, elapsed, abandonedCoziness));
@@ -328,7 +334,7 @@ public class CozinessEngine {
         RandomSource random = level.getRandom();
         long elapsedUnits = elapsedTicks / DecayRules.DELAY_MULTIPLIER;
 
-        boolean wasCozy = abandonedCoziness > MINIMUM_COZINESS_THRESHOLD;
+        boolean wasCozy = abandonedCoziness > getMinimumCozinessThreshold();
 
         IntList toRemove = new IntArrayList();
         int[] snapshot = data.getPackedPositions().toIntArray();
@@ -366,8 +372,10 @@ public class CozinessEngine {
             data.getPackedPositions().remove(p);
         }
 
-        if (wasCozy && elapsedUnits >= 800L) {
-            float cobwebChance = 0.005f * Math.min(1.0f, (float)(elapsedUnits - 800L) / 5000f);
+        if (wasCozy && elapsedUnits >= FogRuleConfig.COBWEB_SPAWN_START_UNITS.get()) {
+            float cobwebChance = (float) FogRuleConfig.COBWEB_SPAWN_CHANCE_MAX.getAsDouble()
+                    * Math.min(1.0f, (float)(elapsedUnits - FogRuleConfig.COBWEB_SPAWN_START_UNITS.get())
+                            / (float) FogRuleConfig.COBWEB_CHANCE_RAMP_UNITS.get());
 
             for (int packed : data.getPackedPositions().toIntArray()) {
                 BlockPos origin = ChunkCozinessData.unpackPos(packed, cPos.x, cPos.z);

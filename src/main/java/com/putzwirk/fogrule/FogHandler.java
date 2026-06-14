@@ -3,6 +3,7 @@ package com.putzwirk.fogrule;
 import com.mojang.blaze3d.shaders.FogShape;
 import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.putzwirk.fogrule.FogRuleConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.FogRenderer;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -17,9 +18,7 @@ import net.neoforged.neoforge.client.event.ViewportEvent;
 @OnlyIn(Dist.CLIENT)
 public class FogHandler {
 
-    public static final float SAFE_RADIUS = 100f;
-    private static final float MAX_FOG_FADE_DISTANCE = 20f;
-    private static final float BLEND_SPEED = 0.0004167f;
+    public static float SAFE_RADIUS = 100f;
 
     public static float currentDanger = 0f;
     public static float currentNight = 0f;
@@ -43,7 +42,7 @@ public class FogHandler {
         float px = (float) player.getX();
         float pz = (float) player.getZ();
 
-        float targetDanger = ClearZone.computeDanger(px, pz, MAX_FOG_FADE_DISTANCE);
+        float targetDanger = ClearZone.computeDanger(px, pz, (float) FogRuleConfig.MAX_FOG_FADE_DISTANCE.getAsDouble());
 
         int simDistanceChunks = mc.options.simulationDistance().get();
         float maxRenderDistance = simDistanceChunks * 16f;
@@ -52,18 +51,30 @@ public class FogHandler {
         rawCozinessLevel = clientCozyRadius;
         lastCalculatedSafeRadius = 0f;
 
-        if (rawCozinessLevel >= 20.0f) {
-            float calculatedClearance = rawCozinessLevel * 3.0f;
-            float maxCozyClearanceRange = Mth.clamp(calculatedClearance, 60.0f, 300.0f);
+        float minimumThreshold = FogRuleConfig.MINIMUM_COZINESS_THRESHOLD.get().floatValue();
 
-            float cozyProgress = (rawCozinessLevel - 20.0f) / (100.0f - 20.0f);
-            lastCalculatedSafeRadius = Mth.lerp(Mth.clamp(cozyProgress, 0f, 1f), 4.0f, 100.0f);
+        if (rawCozinessLevel >= minimumThreshold) {
+            float calculatedClearance = rawCozinessLevel * FogRuleConfig.COZINESS_CLEARANCE_MULTIPLIER.get().floatValue();
+            float maxCozyClearanceRange = Mth.clamp(
+                    calculatedClearance,
+                    FogRuleConfig.MIN_COZY_CLEARANCE_RANGE.get().floatValue(),
+                    FogRuleConfig.MAX_COZY_CLEARANCE_RANGE.get().floatValue());
+
+            float scaleMin = FogRuleConfig.COZINESS_SCALE_MIN.get().floatValue();
+            float scaleMax = FogRuleConfig.COZINESS_SCALE_MAX.get().floatValue();
+            float cozyProgress = (rawCozinessLevel - scaleMin) / (scaleMax - scaleMin);
+            lastCalculatedSafeRadius = Mth.lerp(
+                    Mth.clamp(cozyProgress, 0f, 1f),
+                    FogRuleConfig.MIN_SAFE_RADIUS_FROM_COZINESS.get().floatValue(),
+                    FogRuleConfig.MAX_SAFE_RADIUS_FROM_COZINESS.get().floatValue());
 
             float dx = px - clientCozyX;
             float dz = pz - clientCozyZ;
             float distance = (float) Math.sqrt(dx * dx + dz * dz);
 
-            float dynamicFadeDistance = Math.min(MAX_FOG_FADE_DISTANCE, lastCalculatedSafeRadius * 2.0f);
+            float dynamicFadeDistance = Math.min(
+                    (float) FogRuleConfig.MAX_FOG_FADE_DISTANCE.get().floatValue(),
+                    lastCalculatedSafeRadius * 2.0f);
 
             if (distance <= lastCalculatedSafeRadius) {
                 targetDanger = 0f;
@@ -80,8 +91,9 @@ public class FogHandler {
             }
         }
 
-        currentDanger = Mth.lerp(BLEND_SPEED, currentDanger, targetDanger);
-        activeClearanceRange = Mth.lerp(BLEND_SPEED, activeClearanceRange, targetClearanceRange);
+        float blendSpeed = FogRuleConfig.BLEND_SPEED.get().floatValue();
+        currentDanger = Mth.lerp(blendSpeed, currentDanger, targetDanger);
+        activeClearanceRange = Mth.lerp(blendSpeed, activeClearanceRange, targetClearanceRange);
 
         long time = mc.level.getDayTime() % 24000;
         float targetNight = 0f;

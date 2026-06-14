@@ -1,5 +1,6 @@
 package com.putzwirk.fogrule;
 
+import com.putzwirk.fogrule.abandoned.DecayRules;
 import com.putzwirk.fogrule.cozy.ChunkCozinessData;
 import com.putzwirk.fogrule.cozy.CozinessPacket;
 import org.slf4j.Logger;
@@ -8,6 +9,8 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -21,9 +24,18 @@ public class FogRule {
     public FogRule(IEventBus modEventBus, ModContainer modContainer) {
         ChunkCozinessData.register(modEventBus);
         modEventBus.addListener(this::registerNetworkPayloads);
+        modContainer.registerConfig(ModConfig.Type.SERVER, FogRuleConfig.SPEC, "fogrule-server.toml");
+        modEventBus.addListener(this::onConfigLoad);
         if (FMLEnvironment.dist == Dist.CLIENT) {
             NeoForge.EVENT_BUS.register(new FogHandler());
             NeoForge.EVENT_BUS.register(DebugMenuHandler.class);
+        }
+    }
+
+    private void onConfigLoad(ModConfigEvent event) {
+        if (event.getConfig().getSpec() == FogRuleConfig.SPEC) {
+            DecayRules.reload();
+            FogHandler.SAFE_RADIUS = FogRuleConfig.SAFE_RADIUS.get().floatValue();
         }
     }
 

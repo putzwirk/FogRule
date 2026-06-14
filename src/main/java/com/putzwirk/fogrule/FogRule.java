@@ -23,6 +23,7 @@ public class FogRule {
         modEventBus.addListener(this::registerNetworkPayloads);
         if (FMLEnvironment.dist == Dist.CLIENT) {
             NeoForge.EVENT_BUS.register(new FogHandler());
+            NeoForge.EVENT_BUS.register(DebugMenuHandler.class);
         }
     }
 

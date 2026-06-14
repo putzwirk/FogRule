@@ -9,6 +9,9 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import com.putzwirk.fogrule.abandoned.DecayRule.Result;
 import com.putzwirk.fogrule.cozy.ChunkCozinessData;
+import com.putzwirk.fogrule.cozy.CozinessEngine;
+import net.minecraft.world.level.chunk.LevelChunk;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
@@ -28,13 +31,38 @@ public class DecayRules {
             return Result.NO_CHANGE;
         });
 
+        addRule(s -> s.getBlock() instanceof CampfireBlock && s.getOptionalValue(BlockStateProperties.LIT).orElse(false), ctx -> {
+            if (ctx.elapsedUnits() >= 300L * DELAY_MULTIPLIER) {
+                BlockState extinguishedState = ctx.state().setValue(BlockStateProperties.LIT, false);
+                ctx.level().setBlock(ctx.pos(), extinguishedState, 3);
+
+                LevelChunk chunk = ctx.level().getChunkSource().getChunk(ctx.pos().getX() >> 4, ctx.pos().getZ() >> 4, false);
+                if (chunk != null) {
+                    ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
+
+                    // Force chunk to update internally so it subtracts the lost cozy value of the lit campfire
+                    try {
+                        java.lang.reflect.Method rebuild = CozinessEngine.class.getDeclaredMethod("rebuildChunkCozinessMetrics",
+                                net.minecraft.server.level.ServerLevel.class, LevelChunk.class, ChunkCozinessData.class);
+                        rebuild.setAccessible(true);
+                        rebuild.invoke(null, ctx.level(), chunk, data);
+                    } catch (Exception e) {
+                        data.setAbandonedCoziness(data.getCoziness());
+                        data.setLastVisitedTime(ctx.level().getGameTime());
+                        chunk.setUnsaved(true);
+                    }
+                }
+                return Result.MUTATED_KEEP;
+            }
+            return Result.NO_CHANGE;
+        });
+
         regMutate(s -> s.is(Blocks.COBBLESTONE), Blocks.MOSSY_COBBLESTONE, 500L, 10000L, 0.001f, Result.MUTATED_KEEP);
 
         addRule(s -> { String id = BuiltInRegistries.BLOCK.getKey(s.getBlock()).getPath(); return id.contains("cobble") || s.getBlock() instanceof FenceBlock || id.endsWith("planks") || s.getBlock() instanceof WallBlock; }, ctx -> {
             if (ctx.elapsedUnits() >= 800L && ctx.abandonedCoziness() >= COZINESS_THRESHOLD) {
                 var chunk = ctx.level().getChunkSource().getChunk(ctx.pos().getX() >> 4, ctx.pos().getZ() >> 4, false);
                 if (chunk != null) {
-                    ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
                     if (ctx.random().nextFloat() < 0.02f) {
                         for (var dir : Direction.values()) {
                             var p = ctx.pos().relative(dir);
@@ -49,12 +77,14 @@ public class DecayRules {
             return Result.NO_CHANGE;
         });
 
+
         regBreak(s -> s.is(Blocks.FIRE) || s.is(Blocks.SOUL_FIRE), 30L);
         regBreak(s -> s.getBlock() instanceof TorchBlock || s.getBlock() instanceof WallTorchBlock, 100L);
         regBreak(s -> s.getBlock() instanceof LanternBlock, 300L);
         regBreak(s -> s.is(Blocks.GLASS) || s.getBlock() instanceof IronBarsBlock || s.getBlock() instanceof StainedGlassBlock || s.getBlock() instanceof StainedGlassPaneBlock, 400L);
         regBreak(s -> s.is(Blocks.GLOWSTONE), 500L);
         regBreak(s -> s.is(Blocks.SHROOMLIGHT), 600L);
+        regMutate(s -> s.is(Blocks.DIRT_PATH), Blocks.GRASS_BLOCK, 1000L, 10000L, 0.001f, Result.MUTATED_KEEP);
 
         addRule(s -> s.getBlock() instanceof DoorBlock, ctx -> {
             if (ctx.elapsedUnits() >= 400L && roll(ctx.random(), ctx.elapsedUnits(), 400L, 3000L, 0.002f)) {

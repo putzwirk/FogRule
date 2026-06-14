@@ -18,7 +18,7 @@ import net.neoforged.neoforge.client.event.ViewportEvent;
 public class FogHandler {
 
     public static final float SAFE_RADIUS = 100f;
-    private static final float MAX_FOG_FADE_DISTANCE = 32f;
+    private static final float MAX_FOG_FADE_DISTANCE = 20f;
     private static final float BLEND_SPEED = 0.0004167f;
 
     public static float currentDanger = 0f;
@@ -27,7 +27,10 @@ public class FogHandler {
     public static float clientCozyX = 0f;
     public static float clientCozyZ = 0f;
     public static float clientCozyRadius = 0f;
-    private static float activeClearanceRange = 20f;
+    public static float activeClearanceRange = 20f;
+
+    public static float lastCalculatedSafeRadius = 0f;
+    public static float rawCozinessLevel = 0f;
 
     @SubscribeEvent
     public void onRenderLevelStage(RenderLevelStageEvent event) {
@@ -46,22 +49,33 @@ public class FogHandler {
         float maxRenderDistance = simDistanceChunks * 16f;
         float targetClearanceRange = 20f;
 
-        if (clientCozyRadius >= 4.0f) {
+        rawCozinessLevel = clientCozyRadius;
+        lastCalculatedSafeRadius = 0f;
+
+        if (rawCozinessLevel >= 20.0f) {
+            float calculatedClearance = rawCozinessLevel * 3.0f;
+            float maxCozyClearanceRange = Mth.clamp(calculatedClearance, 60.0f, 300.0f);
+
+            float cozyProgress = (rawCozinessLevel - 20.0f) / (100.0f - 20.0f);
+            lastCalculatedSafeRadius = Mth.lerp(Mth.clamp(cozyProgress, 0f, 1f), 4.0f, 100.0f);
+
             float dx = px - clientCozyX;
             float dz = pz - clientCozyZ;
             float distance = (float) Math.sqrt(dx * dx + dz * dz);
 
-            float dynamicFadeDistance = Math.min(MAX_FOG_FADE_DISTANCE, clientCozyRadius * 2.0f);
+            float dynamicFadeDistance = Math.min(MAX_FOG_FADE_DISTANCE, lastCalculatedSafeRadius * 2.0f);
 
-            if (distance <= clientCozyRadius) {
+            if (distance <= lastCalculatedSafeRadius) {
                 targetDanger = 0f;
-                targetClearanceRange = maxRenderDistance;
+                targetClearanceRange = Math.min(maxCozyClearanceRange, maxRenderDistance);
             } else {
-                float distanceBeyondCozy = distance - clientCozyRadius;
+                float distanceBeyondCozy = distance - lastCalculatedSafeRadius;
                 if (distanceBeyondCozy < dynamicFadeDistance) {
                     float ratio = 1f - (distanceBeyondCozy / dynamicFadeDistance);
                     targetDanger = Math.min(targetDanger, 1f - ratio);
-                    targetClearanceRange = Mth.lerp(ratio, 32f, maxRenderDistance);
+
+                    float activeCap = Math.min(maxCozyClearanceRange, maxRenderDistance);
+                    targetClearanceRange = Mth.lerp(ratio, 32f, activeCap);
                 }
             }
         }
@@ -79,11 +93,6 @@ public class FogHandler {
         currentNight = Mth.lerp(0.05f, currentNight, targetNight);
 
         pushUniforms(currentDanger, currentNight);
-
-        if (player.tickCount % 20 == 0) {
-            String formattedRadius = String.format("%.1f", clientCozyRadius);
-            String formattedRange = String.format("%.1f", activeClearanceRange);
-        }
     }
 
     @SubscribeEvent

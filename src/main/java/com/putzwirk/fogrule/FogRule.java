@@ -33,9 +33,8 @@ public class FogRule {
     }
 
     private void onConfigLoad(ModConfigEvent event) {
-        if (event.getConfig().getSpec() == FogRuleConfig.SPEC) {
+        if (event.getConfig().getType() == ModConfig.Type.SERVER && !(event instanceof ModConfigEvent.Unloading)) {
             DecayRules.reload();
-            FogHandler.SAFE_RADIUS = FogRuleConfig.SAFE_RADIUS.get().floatValue();
         }
     }
 
@@ -43,12 +42,16 @@ public class FogRule {
         final PayloadRegistrar registrar = event.registrar("1");
 
         registrar.playToClient(
+                ClearancePacket.TYPE,
+                ClearancePacket.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> FogHandler.updateClearance(payload.clearanceEnd()))
+        );
+
+        registrar.playToClient(
                 CozinessPacket.TYPE,
                 CozinessPacket.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
-                    FogHandler.clientCozyX = payload.cx();
-                    FogHandler.clientCozyZ = payload.cz();
-                    FogHandler.clientCozyRadius = payload.radius();
+                    FogHandler.updateCoziness(payload.cx(), payload.cz(), payload.radius());
                 })
         );
     }

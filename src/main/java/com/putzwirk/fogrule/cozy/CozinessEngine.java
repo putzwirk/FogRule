@@ -1,5 +1,9 @@
 package com.putzwirk.fogrule.cozy;
 
+import com.putzwirk.fogrule.ClearancePacket;
+import net.minecraft.util.Mth;
+import net.neoforged.neoforge.network.PacketDistributor;
+
 import com.putzwirk.fogrule.FogRule;
 import com.putzwirk.fogrule.FogRuleConfig;
 import com.putzwirk.fogrule.abandoned.DecayContext;
@@ -34,7 +38,6 @@ import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.level.ExplosionEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -150,10 +153,8 @@ public class CozinessEngine {
                 BlockState sideState = serverLevel.getBlockState(sidePos);
                 if (sideState.isAir()) {
                     data.getPackedPositions().remove(packed);
-                    layoutChanged = true;
-                } else {
-                    layoutChanged = true;
                 }
+                layoutChanged = true;
             }
         }
 
@@ -175,6 +176,7 @@ public class CozinessEngine {
             }
         }
     }
+
     @SubscribeEvent
     public static void onPlayerInteract(PlayerInteractEvent.RightClickBlock event) {
         if (event.getLevel().isClientSide() || !(event.getLevel() instanceof ServerLevel serverLevel)) return;
@@ -307,6 +309,7 @@ public class CozinessEngine {
         if (!(event.getLevel() instanceof ServerLevel serverLevel)) return;
         if (pendingDecayQueue.isEmpty()) return;
 
+        // TO THIS:
         int processed = 0;
         while (!pendingDecayQueue.isEmpty() && processed < 4) {
             PendingDecay pending = pendingDecayQueue.poll();
@@ -375,7 +378,7 @@ public class CozinessEngine {
         if (wasCozy && elapsedUnits >= FogRuleConfig.COBWEB_SPAWN_START_UNITS.get()) {
             float cobwebChance = (float) FogRuleConfig.COBWEB_SPAWN_CHANCE_MAX.getAsDouble()
                     * Math.min(1.0f, (float)(elapsedUnits - FogRuleConfig.COBWEB_SPAWN_START_UNITS.get())
-                            / (float) FogRuleConfig.COBWEB_CHANCE_RAMP_UNITS.get());
+                    / (float) FogRuleConfig.COBWEB_CHANCE_RAMP_UNITS.get());
 
             for (int packed : data.getPackedPositions().toIntArray()) {
                 BlockPos origin = ChunkCozinessData.unpackPos(packed, cPos.x, cPos.z);
@@ -398,11 +401,27 @@ public class CozinessEngine {
     public static void onPlayerTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
+        // Runs exactly once per second (every 20 ticks)
         if (player.tickCount % 20 == 0) {
-            syncCozinessToPlayer(player);
+            float clearance = computeBestClearanceForPlayer(player);
+            PacketDistributor.sendToPlayer(player, new ClearancePacket(clearance));
+
+            ServerLevel level = player.serverLevel();
+            ChunkPos chunkPos = player.chunkPosition();
+            long currentTime = level.getGameTime();
+
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    LevelChunk neighbor = level.getChunkSource().getChunk(chunkPos.x + dx, chunkPos.z + dz, false);
+                    if (neighbor != null) {
+                        ChunkCozinessData data = neighbor.getData(ChunkCozinessData.CHUNK_DATA);
+                        data.setLastVisitedTime(currentTime);
+                        neighbor.setUnsaved(true);
+                    }
+                }
+            }
         }
     }
-
     private static void syncCozinessToPlayer(ServerPlayer player) {
         BlockPos pos = player.blockPosition();
         ServerLevel world = player.serverLevel();
@@ -469,4 +488,47 @@ public class CozinessEngine {
         data.setAbandonedCoziness(totalCoziness);
         data.setLastVisitedTime(level.getGameTime());
         chunk.setUnsaved(true);
-    }}
+    }
+
+    private static float computeBestClearanceForPlayer(ServerPlayer player) {
+        ServerLevel level = player.serverLevel();
+        BlockPos playerPos = player.blockPosition();
+        double px = playerPos.getX() + 0.5;
+        double pz = playerPos.getZ() + 0.5;
+
+        float bestEffective = 20f;
+
+        int rangeBlocks = 300;
+        int chunkRange = (rangeBlocks >> 4) + 1;
+        int centerChunkX = playerPos.getX() >> 4;
+        int centerChunkZ = playerPos.getZ() >> 4;
+
+        float minThreshold = FogRuleConfig.MINIMUM_COZINESS_THRESHOLD.get().floatValue();
+        float clearanceMultiplier = FogRuleConfig.COZINESS_CLEARANCE_MULTIPLIER.get().floatValue();
+        float minClearance = FogRuleConfig.MIN_COZY_CLEARANCE_RANGE.get().floatValue();
+        float maxClearance = FogRuleConfig.MAX_COZY_CLEARANCE_RANGE.get().floatValue();
+
+        for (int dx = -chunkRange; dx <= chunkRange; dx++) {
+            for (int dz = -chunkRange; dz <= chunkRange; dz++) {
+                LevelChunk chunk = level.getChunkSource().getChunk(centerChunkX + dx, centerChunkZ + dz, false);
+                if (chunk == null) continue;
+
+                ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
+                float coziness = data.getCoziness();
+                if (coziness < minThreshold) continue;
+
+                float clearance = coziness * clearanceMultiplier;
+                clearance = Mth.clamp(clearance, minClearance, maxClearance);
+
+                int chunkCenterX = (chunk.getPos().x << 4) + 8;
+                int chunkCenterZ = (chunk.getPos().z << 4) + 8;
+                double dist = Math.sqrt((chunkCenterX - px) * (chunkCenterX - px) + (chunkCenterZ - pz) * (chunkCenterZ - pz));
+                float effective = clearance - (float) dist;
+                if (effective > bestEffective) {
+                    bestEffective = effective;
+                }
+            }
+        }
+        return Math.max(bestEffective, 20f);
+    }
+}

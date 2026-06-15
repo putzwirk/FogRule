@@ -12,9 +12,6 @@ public class CozinessRegistry {
     public static float getCozinessValue(BlockState state) {
         Block block = state.getBlock();
 
-        // Complex behaviors: handled in code, not overridable from config.
-        // Fork the mod for advanced customization: https://github.com/putzwirk/FogRule
-
         if (block instanceof FlowerPotBlock potBlock) {
             if (potBlock.getPotted() == Blocks.DEAD_BUSH) {
                 return -2.0f;
@@ -61,7 +58,7 @@ public class CozinessRegistry {
         try {
             ResourceLocation loc = ResourceLocation.parse(selector);
             Block expected = BuiltInRegistries.BLOCK.get(loc);
-            return expected != null && state.getBlock() == expected;
+            return state.getBlock() == expected;
         } catch (Exception e) {
             return false;
         }

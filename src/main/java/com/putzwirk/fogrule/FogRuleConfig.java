@@ -17,11 +17,11 @@ public class FogRuleConfig {
 
     public static final ModConfigSpec.DoubleValue MAX_FOG_FADE_DISTANCE = BUILDER
             .comment("Distance (blocks) over which fog fades in at a safe zone edge. Lower = sharper wall.")
-            .defineInRange("fog.maxFogFadeDistance", 20.0, 1.0, 500.0);
+            .defineInRange("fog.maxFogFadeDistance", 5.0, 1.0, 500.0);
 
     public static final ModConfigSpec.DoubleValue BLEND_SPEED = BUILDER
             .comment("How fast fog interpolates toward its target each frame. Default ~2-second blend at 60fps.")
-            .defineInRange("fog.blendSpeed", 0.0004167, 0.000001, 1.0);
+            .defineInRange("fog.blendSpeed", 0.004167, 0.000001, 1.0);
 
     // -------------------------------------------------------------------------
     // COZINESS
@@ -37,7 +37,7 @@ public class FogRuleConfig {
 
     public static final ModConfigSpec.DoubleValue MIN_COZY_CLEARANCE_RANGE = BUILDER
             .comment("Minimum clearance range (blocks) granted by any qualifying cozy chunk.")
-            .defineInRange("coziness.minClearanceRange", 60.0, 0.0, 10000.0);
+            .defineInRange("coziness.minClearanceRange", 40.0, 0.0, 10000.0);
 
     public static final ModConfigSpec.DoubleValue MAX_COZY_CLEARANCE_RANGE = BUILDER
             .comment("Maximum clearance range (blocks) a cozy chunk can ever grant.")

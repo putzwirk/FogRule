@@ -11,15 +11,11 @@ public record DecayContext(
         BlockState state,
         RandomSource random,
 
-        // attribute - how many ticks elapsed since last chunk visit
         long elapsedTicks,
 
-        // elapsedTicks * DECAY_MULTIPLIER
         long elapsedUnits,
 
-        // coziness of the chunk before it was abandoned
         float abandonedCoziness,
 
-        // if coziness was > then threshold
         boolean wasCozy
 ) {}

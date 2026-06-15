@@ -55,7 +55,6 @@ public class DecayRules {
                 if (chunk != null) {
                     ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
 
-                    // Force chunk to update internally so it subtracts the lost cozy value of the lit campfire
                     try {
                         java.lang.reflect.Method rebuild = CozinessEngine.class.getDeclaredMethod("rebuildChunkCozinessMetrics",
                                 net.minecraft.server.level.ServerLevel.class, LevelChunk.class, ChunkCozinessData.class);
@@ -103,10 +102,6 @@ public class DecayRules {
 
     }
 
-    // -------------------------------------------------------------------------
-    // Config rule parsers
-    // -------------------------------------------------------------------------
-
     private static DecayRule parseRule(String[] parts) {
         return switch (parts[0].toUpperCase()) {
             case "BREAK"  -> parseBreak(parts);
@@ -138,7 +133,6 @@ public class DecayRules {
         Block target;
         try {
             target = BuiltInRegistries.BLOCK.get(ResourceLocation.parse(parts[2]));
-            if (target == null) return null;
         } catch (Exception e) { return null; }
         long base, full;
         float chance;
@@ -158,10 +152,6 @@ public class DecayRules {
         });
     }
 
-    // -------------------------------------------------------------------------
-    // Selector: "namespace:block" or "#namespace:tag"
-    // -------------------------------------------------------------------------
-
     private static Predicate<BlockState> selectorPredicate(String selector) {
         if (selector.startsWith("#")) {
             try {
@@ -172,16 +162,10 @@ public class DecayRules {
         }
         try {
             ResourceLocation loc = ResourceLocation.parse(selector);
-            Block block = BuiltInRegistries.BLOCK.get(loc);
-            if (block == null) return null;
-            final Block b = block;
+            final Block b = BuiltInRegistries.BLOCK.get(loc);
             return s -> s.getBlock() == b;
         } catch (Exception e) { return null; }
     }
-
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
 
     private static void addRule(Predicate<BlockState> match, java.util.function.Function<DecayContext, Result> apply) {
         RULES.add(new DecayRule() {

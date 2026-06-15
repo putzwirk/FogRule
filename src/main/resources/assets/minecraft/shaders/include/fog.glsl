@@ -23,11 +23,6 @@ vec3 fogrule_fogColor(vec4 vanillaFog) {
     return mix(vanillaColor * caveFactor, targetColor, clamp(vanillaBrightness * 2.0, 0.0, 1.0));
 }
 
-vec3 desaturate(vec3 color, float amount) {
-    float luma = dot(color, vec3(0.299, 0.587, 0.114));
-    return mix(color, vec3(luma), amount);
-}
-
 vec4 linear_fog(vec4 inColor, float vertexDistance, float fogStart, float fogEnd, vec4 fogColor) {
     // Pass the entire vec4 (including the critical .a channel) to evaluate cave status
     vec3 baseFog = fogrule_fogColor(fogColor);
@@ -38,8 +33,8 @@ vec4 linear_fog(vec4 inColor, float vertexDistance, float fogStart, float fogEnd
         return vec4(mix(inColor.rgb, fogColor.rgb, fogValue * fogColor.a), inColor.a);
     }
 
-    // Global ambient desaturation — applied to ALL fragments regardless of distance
-    vec3 ambient = desaturate(inColor.rgb, 0.72 * FogDangerLevel);
+    // No desaturation – just use the original color
+    vec3 ambient = inColor.rgb;
 
     // Suppress ambient glowing tints inside shallow and deep caves using the sky-occlusion coefficient
     float vanillaBrightness = max(fogColor.r, max(fogColor.g, fogColor.b));
@@ -57,9 +52,6 @@ vec4 linear_fog(vec4 inColor, float vertexDistance, float fogStart, float fogEnd
     vec3 activeFogColor = mix(fogColor.rgb, baseFog, FogDangerLevel);
 
     // --- OPAQUE ATMOSPHERIC WALL FIX ---
-    // Instead of using vanilla's fogColor.a (which can let the sky bleed through),
-    // we smoothly force the fog opacity to 1.0 as FogDangerLevel increases.
-    // This creates a solid curtain of fog that completely blocks the background star field.
     float activeAlpha = mix(fogColor.a, 1.0, FogDangerLevel * smoothstep(0.1, 0.9, fogValue));
 
     return vec4(mix(darkened, activeFogColor, fogValue * activeAlpha), inColor.a);

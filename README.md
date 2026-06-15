@@ -1,25 +1,15 @@
 
-Installation information
+Fog Rule
 =======
 
-This template repository can be directly cloned to get you started with a new
-mod. Simply create a new repository cloned from this one, by following the
-instructions provided by [GitHub](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template).
+This mod introducing global dense fog mechanics, and fog clears by building. Builds on a chunks that anyone sees for a long time - will degrade and turn into an abandoned builds and player-generated dungeons.
 
-Once you have your clone, simply open the repository in the IDE of your choice. The usual recommendation for an IDE is either IntelliJ IDEA or Eclipse.
-
-If at any point you are missing libraries in your IDE, or you've run into problems you can
-run `gradlew --refresh-dependencies` to refresh the local cache. `gradlew clean` to reset everything 
-{this does not affect your code} and then start the process again.
-
-Mapping Names:
-============
-By default, the MDK is configured to use the official mapping names from Mojang for methods and fields 
-in the Minecraft codebase. These names are covered by a specific license. All modders should be aware of this
-license. For the latest license text, refer to the mapping file itself, or the reference copy here:
-https://github.com/NeoForged/NeoForm/blob/main/Mojang.md
-
-Additional Resources: 
-==========
-Community Documentation: https://docs.neoforged.net/  
-NeoForged Discord: https://discord.neoforged.net/
+# Mod Roadmap
+- [x] Fog. Building removes fog. 
+- [x] Unseen buildings are getting abandoned over time.
+- [x] Sloppy LLM-ed config, will refactor later.
+- [ ] Buildings turning into dungeons with additional loot in chests.
+- [ ] Better coziness level indication.
+- [ ] Cozy places are protected from enemies spawning and creeper grief.
+- [ ] Dungerous fog 1: enemies spawning even during a daytime, do not burn on sun.
+- [ ] Dungerous fog 2: scary modded mobs? Maybe

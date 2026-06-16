@@ -11,22 +11,23 @@ public class FogRuleConfig {
             .defineInRange("fog.minFogDistance", 20.0, 1.0, 500.0);
 
     public static final ModConfigSpec.DoubleValue BLEND_SPEED = BUILDER
-            .defineInRange("fog.blendSpeed", 0.004167, 0.000001, 1.0);
+            .defineInRange("fog.blendSpeed", 0.1, 0.000001, 1.0);
 
     public static final ModConfigSpec.IntValue PLAYER_CHUNK_RADIUS = BUILDER
-            .defineInRange("fog.playerChunkRadius", 8, 1, 32);
+            .defineInRange("fog.playerChunkRadius", 32, 1, 32);
 
     public static final ModConfigSpec.DoubleValue CLEARANCE_MULTIPLIER = BUILDER
-            .defineInRange("fog.clearanceMultiplier", 3.0, 0.1, 100.0);
+            .defineInRange("fog.clearanceMultiplier", 1.0, 0.1, 100.0);
+
+    public static final ModConfigSpec.DoubleValue CLEARANCE_EFFECTIVENESS_EXPONENT = BUILDER
+            .defineInRange("fog.clearanceEffectivenessExponent", 0.75, 0.1, 1.0);
+
 
     public static final ModConfigSpec.DoubleValue MAX_CLEARANCE_RANGE = BUILDER
-            .defineInRange("fog.maxClearanceRange", 300.0, 0.0, 10000.0);
+            .defineInRange("fog.maxClearanceRange", 500.0, 0.0, 10000.0);
 
     public static final ModConfigSpec.LongValue DELAY_MULTIPLIER = BUILDER
             .defineInRange("decay.delayMultiplier", 1L, 1L, Long.MAX_VALUE);
-
-    public static final ModConfigSpec.DoubleValue DECAY_COZINESS_THRESHOLD = BUILDER
-            .defineInRange("decay.cozinessThreshold", 35.0, 0.0, 10000.0);
 
     public static final ModConfigSpec.LongValue DECAY_TRIGGER_TICKS = BUILDER
             .defineInRange("decay.triggerTicks", 1L, 1L, Long.MAX_VALUE);
@@ -55,6 +56,16 @@ public class FogRuleConfig {
                             "#minecraft:wool_carpets 0.8"
                     ),
                     o -> o instanceof String s && isValidCozinessEntry(s)
+            );
+
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> DIMINISHING_BLOCK_GROUPS = BUILDER
+            .defineListAllowEmpty(
+                    "diminishingBlockGroups",
+                    List.of(
+                            "minecraft:torch minecraft:wall_torch 10",
+                            "minecraft:lantern 10"
+                    ),
+                    o -> o instanceof String s && isValidDiminishingEntry(s)
             );
 
     public static final ModConfigSpec.ConfigValue<List<? extends String>> DECAY_RULES = BUILDER
@@ -106,6 +117,17 @@ public class FogRuleConfig {
         return true;
     }
 
+    private static boolean isValidDiminishingEntry(String s) {
+        if (s == null || s.isBlank()) return false;
+        String[] parts = s.trim().split("\\s+");
+        if (parts.length < 2) return false;
+        try {
+            Integer.parseInt(parts[parts.length - 1]);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+        return true;
+    }
     private static boolean isValidDecayEntry(String s) {
         if (s == null || s.isBlank()) return false;
         String[] parts = s.trim().split("\\s+");

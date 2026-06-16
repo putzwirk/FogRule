@@ -27,7 +27,6 @@ public class CozinessRegistry {
             return isLit ? 3.0f : 0.1f;
         }
 
-        // Simple blocks: read from config list.
         for (String entry : FogRuleConfig.BLOCK_COZINESS_VALUES.get()) {
             String[] parts = entry.trim().split("\\s+");
             if (parts.length != 2) continue;
@@ -41,7 +40,7 @@ public class CozinessRegistry {
         return 0.1f;
     }
 
-    private static boolean matchesSelector(String selector, BlockState state) {
+    public static boolean matchesSelector(String selector, BlockState state) {
         if (selector.startsWith("#")) {
             try {
                 ResourceLocation loc = ResourceLocation.parse(selector.substring(1));

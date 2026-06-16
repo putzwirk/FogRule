@@ -1,6 +1,7 @@
 package com.putzwirk.fogrule;
 
 import com.putzwirk.fogrule.cozy.ChunkCozinessData;
+import com.putzwirk.fogrule.cozy.CozinessEngine;
 import com.putzwirk.fogrule.cozy.CozyDatabase;
 import com.putzwirk.fogrule.abandoned.DecayRules;
 import net.neoforged.api.distmarker.Dist;
@@ -36,6 +37,9 @@ public class FogRule {
     private void onConfigLoad(ModConfigEvent event) {
         if (event.getConfig().getType() == ModConfig.Type.SERVER && !(event instanceof ModConfigEvent.Unloading)) {
             DecayRules.reload();
+        }
+        if (event.getConfig().getSpec() == FogRuleConfig.SPEC) {
+            CozinessEngine.invalidateConfigCache();
         }
     }
 

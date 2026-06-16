@@ -26,15 +26,16 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @EventBusSubscriber(modid = FogRule.MODID)
 public class CozinessEngine {
-
+    private static List<DiminishingGroup> compiledGroups = null;
+    private static class DiminishingGroup {
+        final List<String> selectors = new ArrayList<>();
+        int maxCount;
+    }
     public static final ConcurrentHashMap<ChunkPos, Float> loadedCoziness = new ConcurrentHashMap<>();
     private static final Set<ServerPlayer> dirtyPlayers = new HashSet<>();
     private static int tickCounter = 0;
@@ -48,10 +49,53 @@ public class CozinessEngine {
         return FogRuleConfig.DECAY_TRIGGER_TICKS.get();
     }
 
-    public static boolean isInsideCozyZone(ServerLevel level, BlockPos pos) {
-        ChunkPos cPos = new ChunkPos(pos);
-        Float coziness = loadedCoziness.get(cPos);
-        return coziness != null && coziness > 0;
+    public static boolean isInsideCozyZone(BlockPos pos, ServerLevel level) {
+        ServerPlayer nearestPlayer = (ServerPlayer) level.getNearestPlayer(
+                pos.getX() + 0.5,
+                pos.getY() + 0.5,
+                pos.getZ() + 0.5,
+                -1.0,
+                false
+        );
+
+        if (nearestPlayer == null) {
+            return false;
+        }
+
+        int pX = nearestPlayer.chunkPosition().x;
+        int pZ = nearestPlayer.chunkPosition().z;
+        int r = FogRuleConfig.PLAYER_CHUNK_RADIUS.get();
+        float maxCoziness = 0;
+        int bestX = pX;
+        int bestZ = pZ;
+
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dz = -r; dz <= r; dz++) {
+                Float cz = loadedCoziness.get(new ChunkPos(pX + dx, pZ + dz));
+                if (cz != null && cz > maxCoziness) {
+                    maxCoziness = cz;
+                    bestX = pX + dx;
+                    bestZ = pZ + dz;
+                }
+            }
+        }
+
+        if (maxCoziness <= 0) {
+            return false;
+        }
+
+        float targetRadius = Math.min(maxCoziness * FogRuleConfig.CLEARANCE_MULTIPLIER.get().floatValue(), FogRuleConfig.MAX_CLEARANCE_RANGE.get().floatValue());
+        float cx = (bestX << 4) + 8f;
+        float cz = (bestZ << 4) + 8f;
+
+        float dx = (float) pos.getX() + 0.5f - cx;
+        float dz = (float) pos.getZ() + 0.5f - cz;
+
+        float distSqToCenter = dx * dx + dz * dz;
+
+        float checkRadius = targetRadius + 20.0f;
+
+        return distSqToCenter <= (checkRadius * checkRadius);
     }
 
     public static int forceTimeSkipForPlayer(ServerPlayer player, long simulatedTicksPassed) {
@@ -140,23 +184,23 @@ public class CozinessEngine {
         if (!(event.getEntity() instanceof ServerPlayer)) return;
         LevelAccessor level = event.getLevel();
         if (level.isClientSide() || !(level instanceof ServerLevel serverLevel)) return;
-
         BlockPos pos = event.getPos();
         BlockState placedState = event.getPlacedBlock();
-
         LevelChunk chunk = level.getChunkSource().getChunk(pos.getX() >> 4, pos.getZ() >> 4, false);
         if (chunk == null) return;
-
         ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
         int packedPos = ChunkCozinessData.packPos(pos);
-
         if (data.getPackedPositions().add(packedPos)) {
-            float addition = CozinessRegistry.getCozinessValue(placedState);
-            float newCoziness = data.getCoziness() + addition;
-            data.setCoziness(newCoziness);
-            loadedCoziness.put(chunk.getPos(), newCoziness);
-            data.setAbandonedCoziness(newCoziness);
             data.setLastVisitedTime(serverLevel.getGameTime());
+            if (getMatchingGroupIndex(placedState) != -1) {
+                recalculateCoziness(serverLevel, chunk, data);
+            } else {
+                float addition = CozinessRegistry.getCozinessValue(placedState);
+                float newCoziness = data.getCoziness() + addition;
+                data.setCoziness(newCoziness);
+                loadedCoziness.put(chunk.getPos(), newCoziness);
+                data.setAbandonedCoziness(newCoziness);
+            }
             chunk.setUnsaved(true);
         }
     }
@@ -272,7 +316,7 @@ public class CozinessEngine {
             }
         }
 
-        float clearance = (float) (weightedSum * FogRuleConfig.CLEARANCE_MULTIPLIER.get());
+        float clearance = (float) (Math.pow(weightedSum, 0.6) * FogRuleConfig.CLEARANCE_MULTIPLIER.get());
         clearance = Math.min(clearance, FogRuleConfig.MAX_CLEARANCE_RANGE.get().floatValue());
 
         PacketDistributor.sendToPlayer(player, new ClearancePacket(clearance));
@@ -307,15 +351,25 @@ public class CozinessEngine {
     }
 
     public static void recalculateCoziness(ServerLevel level, LevelChunk chunk, ChunkCozinessData data) {
+        ensureGroupsCompiled();
         float total = 0;
         IntOpenHashSet toRemove = new IntOpenHashSet();
+        int[] groupCounts = new int[compiledGroups.size()];
         for (int packed : data.getPackedPositions()) {
             BlockPos pos = ChunkCozinessData.unpackPos(packed, chunk.getPos().x, chunk.getPos().z);
             BlockState state = level.getBlockState(pos);
             if (state.isAir()) {
                 toRemove.add(packed);
             } else {
-                total += CozinessRegistry.getCozinessValue(state);
+                float value = CozinessRegistry.getCozinessValue(state);
+                int groupIdx = getMatchingGroupIndex(state);
+                if (groupIdx != -1) {
+                    groupCounts[groupIdx]++;
+                    if (groupCounts[groupIdx] > compiledGroups.get(groupIdx).maxCount) {
+                        value = 0.0f;
+                    }
+                }
+                total += value;
             }
         }
         if (!toRemove.isEmpty()) {
@@ -325,4 +379,41 @@ public class CozinessEngine {
         loadedCoziness.put(chunk.getPos(), total);
         chunk.setUnsaved(true);
     }
+    private static void ensureGroupsCompiled() {
+        if (compiledGroups != null) return;
+        compiledGroups = new ArrayList<>();
+        List<? extends String> lines = FogRuleConfig.DIMINISHING_BLOCK_GROUPS.get();
+        for (String line : lines) {
+            String[] parts = line.trim().split("\\s+");
+            if (parts.length < 2) continue;
+            DiminishingGroup group = new DiminishingGroup();
+            for (int i = 0; i < parts.length - 1; i++) {
+                group.selectors.add(parts[i]);
+            }
+            try {
+                group.maxCount = Integer.parseInt(parts[parts.length - 1]);
+                compiledGroups.add(group);
+            } catch (NumberFormatException ignored) {}
+        }
+    }
+
+    public static void invalidateConfigCache() {
+        compiledGroups = null;
+    }
+
+    private static int getMatchingGroupIndex(BlockState state) {
+        ensureGroupsCompiled();
+        for (int i = 0; i < compiledGroups.size(); i++) {
+            DiminishingGroup group = compiledGroups.get(i);
+            for (String selector : group.selectors) {
+                if (CozinessRegistry.matchesSelector(selector, state)) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+
+
 }

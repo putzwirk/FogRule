@@ -28,7 +28,6 @@ public class DecayRules {
     public static void reload() {
         RULES.clear();
         DELAY_MULTIPLIER = FogRuleConfig.DELAY_MULTIPLIER.get();
-        COZINESS_THRESHOLD = FogRuleConfig.DECAY_COZINESS_THRESHOLD.get().floatValue();
 
         for (String entry : FogRuleConfig.DECAY_RULES.get()) {
             String[] parts = entry.trim().split("\\s+");

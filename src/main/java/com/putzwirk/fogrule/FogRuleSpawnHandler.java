@@ -26,7 +26,7 @@ public class FogRuleSpawnHandler {
         if (!isHostile) return;
 
         BlockPos pos = new BlockPos((int)event.getX(), (int)event.getY(), (int)event.getZ());
-        boolean isSafe = isInsideCozyZone(level, pos);
+        boolean isSafe = isInsideCozyZone(pos, level);
 
         if (isSafe) {
             event.setResult(MobSpawnEvent.PositionCheck.Result.FAIL);
@@ -56,7 +56,7 @@ public class FogRuleSpawnHandler {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
 
         BlockPos pos = event.getPos();
-        boolean isSafe = isInsideCozyZone(level, pos);
+        boolean isSafe = isInsideCozyZone(pos, level);
 
         if (isSafe) {
             event.setResult(MobSpawnEvent.SpawnPlacementCheck.Result.FAIL);

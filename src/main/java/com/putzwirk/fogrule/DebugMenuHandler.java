@@ -16,8 +16,7 @@ public class DebugMenuHandler {
         List<String> leftList = event.getLeft();
 
         leftList.add("");
-        leftList.add("[Fog System]");
-        leftList.add(String.format("  Danger Intensity: %.2f%%", FogHandler.currentDanger * 100f));
-        leftList.add(String.format("  Fog End Distance: %.1f blocks", FogHandler.currentClearanceEnd));
+        leftList.add("[Fog Rule]");
+        leftList.add(String.format("  Coziness Range: %.1f blocks", FogHandler.currentClearanceEnd));
     }
 }

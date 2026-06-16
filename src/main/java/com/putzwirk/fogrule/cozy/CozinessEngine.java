@@ -314,7 +314,6 @@ public class CozinessEngine {
         if (!(event.getLevel() instanceof ServerLevel serverLevel)) return;
         if (pendingDecayQueue.isEmpty()) return;
 
-        // TO THIS:
         int processed = 0;
         while (!pendingDecayQueue.isEmpty() && processed < 4) {
             PendingDecay pending = pendingDecayQueue.poll();
@@ -406,7 +405,6 @@ public class CozinessEngine {
     public static void onPlayerTick(PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-        // Runs exactly once per second (every 20 ticks)
         if (player.tickCount % 20 == 0) {
             float clearance = computeBestClearanceForPlayer(player);
             PacketDistributor.sendToPlayer(player, new ClearancePacket(clearance));
@@ -495,6 +493,41 @@ public class CozinessEngine {
         chunk.setUnsaved(true);
     }
 
+    public static boolean isInsideCozyZone(ServerLevel level, BlockPos pos) {
+        double px = pos.getX() + 0.5;
+        double pz = pos.getZ() + 0.5;
+
+        int rangeBlocks = FogRuleConfig.MAX_COZY_CLEARANCE_RANGE.get().intValue();
+        int chunkRange = (rangeBlocks >> 4) + 1;
+        int centerChunkX = pos.getX() >> 4;
+        int centerChunkZ = pos.getZ() >> 4;
+
+        float minThreshold = FogRuleConfig.MINIMUM_COZINESS_THRESHOLD.get().floatValue();
+        float clearanceMultiplier = FogRuleConfig.COZINESS_CLEARANCE_MULTIPLIER.get().floatValue();
+        float minClearance = FogRuleConfig.MIN_COZY_CLEARANCE_RANGE.get().floatValue();
+        float maxClearance = FogRuleConfig.MAX_COZY_CLEARANCE_RANGE.get().floatValue();
+
+        for (int dx = -chunkRange; dx <= chunkRange; dx++) {
+            for (int dz = -chunkRange; dz <= chunkRange; dz++) {
+                LevelChunk chunk = level.getChunkSource().getChunk(centerChunkX + dx, centerChunkZ + dz, false);
+                if (chunk == null) continue;
+
+                ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
+                float coziness = data.getCoziness();
+                if (coziness < minThreshold) continue;
+
+                float clearance = net.minecraft.util.Mth.clamp(coziness * clearanceMultiplier, minClearance, maxClearance);
+
+                int chunkCenterX = (chunk.getPos().x << 4) + 8;
+                int chunkCenterZ = (chunk.getPos().z << 4) + 8;
+                double distSq = (chunkCenterX - px) * (chunkCenterX - px) + (chunkCenterZ - pz) * (chunkCenterZ - pz);
+
+                if (distSq <= (clearance * clearance)) return true;
+            }
+        }
+        return false;
+    }
+
     private static float computeBestClearanceForPlayer(ServerPlayer player) {
         ServerLevel level = player.serverLevel();
         BlockPos playerPos = player.blockPosition();
@@ -503,7 +536,7 @@ public class CozinessEngine {
 
         float bestEffective = 20f;
 
-        int rangeBlocks = 300;
+        int rangeBlocks = FogRuleConfig.MAX_COZY_CLEARANCE_RANGE.get().intValue();
         int chunkRange = (rangeBlocks >> 4) + 1;
         int centerChunkX = playerPos.getX() >> 4;
         int centerChunkZ = playerPos.getZ() >> 4;

@@ -31,6 +31,7 @@ public class FogRule {
             NeoForge.EVENT_BUS.register(new FogHandler());
             NeoForge.EVENT_BUS.register(DebugMenuHandler.class);
             NeoForge.EVENT_BUS.register(SpawnChunkCoziness.class);
+            NeoForge.EVENT_BUS.register(FogRuleSpawnHandler.class);
         }
     }
 

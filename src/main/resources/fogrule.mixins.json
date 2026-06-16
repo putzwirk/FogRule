@@ -2,7 +2,9 @@
   "required": true,
   "package": "com.putzwirk.fogrule.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": [
+    "MobSunBurnMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   },

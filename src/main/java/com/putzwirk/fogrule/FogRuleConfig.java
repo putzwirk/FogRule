@@ -188,6 +188,25 @@ public class FogRuleConfig {
                     o -> o instanceof String s && isValidDecayEntry(s)
             );
 
+    // Mob fog spawning
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> FOG_ALLOWED_MOBS = BUILDER
+            .comment(
+                    "List of mob registry IDs allowed to spawn out in the wild open-sky fog during the day.",
+                    "Format: \"namespace:entity_type_id\". Supports modded mobs.",
+                    "Example: \"minecraft:zombie\", \"minecraft:skeleton\""
+            )
+            .defineListAllowEmpty(
+                    "fogAllowedMobs",
+                    List.of(
+                            "minecraft:zombie",
+                            "minecraft:skeleton",
+                            "minecraft:spider",
+                            "minecraft:creeper",
+                            "minecraft:husk"
+                    ),
+                    o -> o instanceof String s && s.contains(":")
+            );
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     // -------------------------------------------------------------------------

@@ -1,11 +1,8 @@
 package com.putzwirk.fogrule;
 
-import com.putzwirk.fogrule.abandoned.DecayRules;
 import com.putzwirk.fogrule.cozy.ChunkCozinessData;
-import com.putzwirk.fogrule.cozy.CozinessPacket;
-import com.putzwirk.fogrule.cozy.SpawnChunkCoziness;
-import org.slf4j.Logger;
-import com.mojang.logging.LogUtils;
+import com.putzwirk.fogrule.cozy.CozyDatabase;
+import com.putzwirk.fogrule.abandoned.DecayRules;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -20,17 +17,18 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 @Mod(FogRule.MODID)
 public class FogRule {
     public static final String MODID = "fogrule";
-    public static final Logger LOGGER = LogUtils.getLogger();
 
     public FogRule(IEventBus modEventBus, ModContainer modContainer) {
         ChunkCozinessData.register(modEventBus);
         modEventBus.addListener(this::registerNetworkPayloads);
         modContainer.registerConfig(ModConfig.Type.SERVER, FogRuleConfig.SPEC, "fogrule-server.toml");
         modEventBus.addListener(this::onConfigLoad);
+
+        CozyDatabase.init();
+
         if (FMLEnvironment.dist == Dist.CLIENT) {
             NeoForge.EVENT_BUS.register(new FogHandler());
             NeoForge.EVENT_BUS.register(DebugMenuHandler.class);
-            NeoForge.EVENT_BUS.register(SpawnChunkCoziness.class);
             NeoForge.EVENT_BUS.register(FogRuleSpawnHandler.class);
         }
     }
@@ -48,14 +46,6 @@ public class FogRule {
                 ClearancePacket.TYPE,
                 ClearancePacket.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> FogHandler.updateClearance(payload.clearanceEnd()))
-        );
-
-        registrar.playToClient(
-                CozinessPacket.TYPE,
-                CozinessPacket.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> {
-                    FogHandler.updateCoziness(payload.cx(), payload.cz(), payload.radius());
-                })
         );
     }
 }

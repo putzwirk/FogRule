@@ -6,34 +6,23 @@ import com.putzwirk.fogrule.FogRule;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.ints.IntSet;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.level.block.Block;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.attachment.AttachmentType;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class ChunkCozinessData {
     private float coziness = 0.0f;
-
     private float abandonedCoziness = 0.0f;
-
     private long lastVisitedTime = 0L;
     private final IntSet packedPositions = new IntOpenHashSet();
-    private final Map<Block, Integer> blockCounts = new HashMap<>();
 
     public ChunkCozinessData() {}
 
-    public ChunkCozinessData(float coziness, float abandonedCoziness, long lastVisitedTime,
-                             java.util.List<Integer> packedList, Map<Block, Integer> blockCounts) {
+    public ChunkCozinessData(float coziness, float abandonedCoziness, long lastVisitedTime) {
         this.coziness = coziness;
         this.abandonedCoziness = abandonedCoziness;
         this.lastVisitedTime = lastVisitedTime;
-        this.packedPositions.addAll(packedList);
-        this.blockCounts.putAll(blockCounts);
     }
 
     public static int packPos(BlockPos pos) {
@@ -61,31 +50,10 @@ public class ChunkCozinessData {
 
     public IntSet getPackedPositions() { return packedPositions; }
 
-    public Map<Block, Integer> getBlockCounts() { return blockCounts; }
-
-    public int getBlockCount(Block block) { return blockCounts.getOrDefault(block, 0); }
-
-    public void incrementBlockCount(Block block) {
-        blockCounts.put(block, getBlockCount(block) + 1);
-    }
-
-    public void decrementBlockCount(Block block) {
-        int current = getBlockCount(block);
-        if (current <= 1) blockCounts.remove(block);
-        else blockCounts.put(block, current - 1);
-    }
-
-    private static final Codec<Map<Block, Integer>> COUNTER_MAP_CODEC = Codec.unboundedMap(
-            BuiltInRegistries.BLOCK.byNameCodec(),
-            Codec.INT
-    );
-
     public static final Codec<ChunkCozinessData> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.FLOAT.fieldOf("coziness").forGetter(ChunkCozinessData::getCoziness),
             Codec.FLOAT.optionalFieldOf("abandoned_coziness", 0.0f).forGetter(ChunkCozinessData::getAbandonedCoziness),
-            Codec.LONG.fieldOf("last_visited").forGetter(ChunkCozinessData::getLastVisitedTime),
-            Codec.INT.listOf().fieldOf("packed_blocks").forGetter(d -> new java.util.ArrayList<>(d.getPackedPositions())),
-            COUNTER_MAP_CODEC.optionalFieldOf("block_counts", new HashMap<>()).forGetter(ChunkCozinessData::getBlockCounts)
+            Codec.LONG.fieldOf("last_visited").forGetter(ChunkCozinessData::getLastVisitedTime)
     ).apply(instance, ChunkCozinessData::new));
 
     public static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES =

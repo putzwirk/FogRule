@@ -31,15 +31,12 @@ public class FogHandler {
         Player player = mc.player;
         if (player == null || mc.level == null) return;
 
-        float px = (float) player.getX();
-        float pz = (float) player.getZ();
         float blendSpeed = FogRuleConfig.BLEND_SPEED.get().floatValue();
-
-        ClearZone.tick(blendSpeed);
 
         currentClearanceEnd = Mth.lerp(blendSpeed, currentClearanceEnd, targetClearanceEnd);
 
-        float targetDanger = ClearZone.computeDanger(px, pz, (float) FogRuleConfig.MAX_FOG_FADE_DISTANCE.getAsDouble());
+        float maxClearance = FogRuleConfig.MAX_CLEARANCE_RANGE.get().floatValue();
+        float targetDanger = 1.0f - Mth.clamp(currentClearanceEnd / maxClearance, 0f, 1f);
         currentDanger = Mth.lerp(blendSpeed, currentDanger, targetDanger);
 
         long time = mc.level.getDayTime() % 24000;
@@ -83,6 +80,7 @@ public class FogHandler {
         } else {
             float finalEnd = Math.min(currentClearanceEnd, vanillaEnd);
             float finalStart = finalEnd * 0.05f;
+            finalEnd = Math.max(finalEnd, FogRuleConfig.MIN_FOG_DISTANCE.get().floatValue());
             event.setNearPlaneDistance(finalStart);
             event.setFarPlaneDistance(finalEnd);
         }
@@ -102,9 +100,5 @@ public class FogHandler {
 
     public static void updateClearance(float clearanceEnd) {
         targetClearanceEnd = clearanceEnd;
-    }
-
-    public static void updateCoziness(float cx, float cz, float radius) {
-        ClearZone.setCozyZone(cx, cz, radius);
     }
 }

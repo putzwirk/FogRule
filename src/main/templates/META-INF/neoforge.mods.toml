@@ -93,3 +93,9 @@ config="${mod_id}.mixins.json"
 # stop your mod loading on the server for example.
 #[features.${mod_id}]
 #openGLVersion="[3.2,)"
+[[dependencies.mod_id]] # Replace with your actual mod id
+modId="sqlite-jdbc"
+mandatory=true
+versionRange="[3.45.1.0,)"
+ordering="NONE"
+side="BOTH"

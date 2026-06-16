@@ -54,22 +54,12 @@ public class DecayRules {
                 LevelChunk chunk = ctx.level().getChunkSource().getChunk(ctx.pos().getX() >> 4, ctx.pos().getZ() >> 4, false);
                 if (chunk != null) {
                     ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
-
-                    try {
-                        java.lang.reflect.Method rebuild = CozinessEngine.class.getDeclaredMethod("rebuildChunkCozinessMetrics",
-                                net.minecraft.server.level.ServerLevel.class, LevelChunk.class, ChunkCozinessData.class);
-                        rebuild.setAccessible(true);
-                        rebuild.invoke(null, ctx.level(), chunk, data);
-                    } catch (Exception e) {
-                        data.setAbandonedCoziness(data.getCoziness());
-                        data.setLastVisitedTime(ctx.level().getGameTime());
-                        chunk.setUnsaved(true);
-                    }
+                    CozinessEngine.recalculateCoziness(ctx.level(), chunk, data);
                 }
                 return Result.MUTATED_KEEP;
             }
             return Result.NO_CHANGE;
-        });
+        });;
 
         addRule(s -> { String id = BuiltInRegistries.BLOCK.getKey(s.getBlock()).getPath(); return id.contains("cobble") || s.getBlock() instanceof FenceBlock || id.endsWith("planks") || s.getBlock() instanceof WallBlock; }, ctx -> {
             if (ctx.elapsedUnits() >= 800L && ctx.abandonedCoziness() >= COZINESS_THRESHOLD) {

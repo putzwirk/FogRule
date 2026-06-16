@@ -22,10 +22,6 @@ public class CozinessRegistry {
             return 1.2f;
         }
 
-        if (block instanceof TorchBlock || block instanceof WallTorchBlock || block instanceof LanternBlock) {
-            return 1.0f;
-        }
-
         if (block instanceof CampfireBlock) {
             boolean isLit = state.getOptionalValue(BlockStateProperties.LIT).orElse(false);
             return isLit ? 3.0f : 0.1f;

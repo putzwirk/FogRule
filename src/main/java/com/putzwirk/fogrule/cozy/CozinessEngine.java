@@ -20,6 +20,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
@@ -37,7 +38,10 @@ public class CozinessEngine {
         int maxCount;
     }
     public static final ConcurrentHashMap<ChunkPos, Float> loadedCoziness = new ConcurrentHashMap<>();
-    private static final Set<ServerPlayer> dirtyPlayers = new HashSet<>();
+    private static final Map<UUID, Float> playerClearanceMap = new ConcurrentHashMap<>();
+    private static final Map<UUID, ChunkPos> lastPlayerChunk = new HashMap<>();
+    private static final Set<UUID> dirtyPlayers = ConcurrentHashMap.newKeySet();
+
     private static int tickCounter = 0;
 
     private static final Deque<PendingDecay> pendingDecayQueue = new ArrayDeque<>();
@@ -50,52 +54,33 @@ public class CozinessEngine {
     }
 
     public static boolean isInsideCozyZone(BlockPos pos, ServerLevel level) {
-        ServerPlayer nearestPlayer = (ServerPlayer) level.getNearestPlayer(
-                pos.getX() + 0.5,
-                pos.getY() + 0.5,
-                pos.getZ() + 0.5,
-                -1.0,
-                false
-        );
+        ServerPlayer nearestPlayer = null;
+        double nearestDistSq = Double.MAX_VALUE;
 
-        if (nearestPlayer == null) {
-            return false;
-        }
-
-        int pX = nearestPlayer.chunkPosition().x;
-        int pZ = nearestPlayer.chunkPosition().z;
-        int r = FogRuleConfig.PLAYER_CHUNK_RADIUS.get();
-        float maxCoziness = 0;
-        int bestX = pX;
-        int bestZ = pZ;
-
-        for (int dx = -r; dx <= r; dx++) {
-            for (int dz = -r; dz <= r; dz++) {
-                Float cz = loadedCoziness.get(new ChunkPos(pX + dx, pZ + dz));
-                if (cz != null && cz > maxCoziness) {
-                    maxCoziness = cz;
-                    bestX = pX + dx;
-                    bestZ = pZ + dz;
-                }
+        for (ServerPlayer player : level.players()) {
+            double dx = player.getX() - (pos.getX() + 0.5);
+            double dz = player.getZ() - (pos.getZ() + 0.5);
+            double distSq = dx * dx + dz * dz;
+            if (distSq < nearestDistSq) {
+                nearestDistSq = distSq;
+                nearestPlayer = player;
             }
         }
 
-        if (maxCoziness <= 0) {
-            return false;
+        if (nearestPlayer == null) return false;
+
+        if (nearestPlayer.tickCount < 200) {
+            return true;
         }
 
-        float targetRadius = Math.min(maxCoziness * FogRuleConfig.CLEARANCE_MULTIPLIER.get().floatValue(), FogRuleConfig.MAX_CLEARANCE_RANGE.get().floatValue());
-        float cx = (bestX << 4) + 8f;
-        float cz = (bestZ << 4) + 8f;
+        Float clearance = playerClearanceMap.get(nearestPlayer.getUUID());
+        if (clearance == null) return false;
 
-        float dx = (float) pos.getX() + 0.5f - cx;
-        float dz = (float) pos.getZ() + 0.5f - cz;
+        float minAllowedFog = FogRuleConfig.MIN_FOG_DISTANCE.get().floatValue();
+        float activeClearance = Math.max(clearance, minAllowedFog);
 
-        float distSqToCenter = dx * dx + dz * dz;
-
-        float checkRadius = targetRadius + 20.0f;
-
-        return distSqToCenter <= (checkRadius * checkRadius);
+        double dist = Math.sqrt(nearestDistSq);
+        return dist <= (activeClearance + 80.0f);
     }
 
     public static int forceTimeSkipForPlayer(ServerPlayer player, long simulatedTicksPassed) {
@@ -126,9 +111,9 @@ public class CozinessEngine {
                 chunksAltered++;
             }
         }
+        updatePlayerFog(player);
         return chunksAltered;
     }
-
     @SubscribeEvent
     public static void onChunkLoad(ChunkEvent.Load event) {
         if (!(event.getLevel() instanceof ServerLevel serverLevel)) return;
@@ -184,28 +169,70 @@ public class CozinessEngine {
         if (!(event.getEntity() instanceof ServerPlayer)) return;
         LevelAccessor level = event.getLevel();
         if (level.isClientSide() || !(level instanceof ServerLevel serverLevel)) return;
+
         BlockPos pos = event.getPos();
-        BlockState placedState = event.getPlacedBlock();
         LevelChunk chunk = level.getChunkSource().getChunk(pos.getX() >> 4, pos.getZ() >> 4, false);
         if (chunk == null) return;
+
         ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
         int packedPos = ChunkCozinessData.packPos(pos);
-        if (data.getPackedPositions().add(packedPos)) {
-            data.setLastVisitedTime(serverLevel.getGameTime());
-            if (getMatchingGroupIndex(placedState) != -1) {
-                recalculateCoziness(serverLevel, chunk, data);
-            } else {
-                float addition = CozinessRegistry.getCozinessValue(placedState);
-                float newCoziness = data.getCoziness() + addition;
-                data.setCoziness(newCoziness);
-                loadedCoziness.put(chunk.getPos(), newCoziness);
-                data.setAbandonedCoziness(newCoziness);
+
+        data.getPackedPositions().add(packedPos);
+        data.setLastVisitedTime(serverLevel.getGameTime());
+
+        recalculateCoziness(serverLevel, chunk, data);
+        chunk.setUnsaved(true);
+
+        ChunkPos placedChunkPos = chunk.getPos();
+        int radius = FogRuleConfig.PLAYER_CHUNK_RADIUS.get();
+        for (ServerPlayer player : serverLevel.players()) {
+            ChunkPos playerChunkPos = player.chunkPosition();
+            int dx = Math.abs(placedChunkPos.x - playerChunkPos.x);
+            int dz = Math.abs(placedChunkPos.z - playerChunkPos.z);
+            if (dx <= radius && dz <= radius) {
+                dirtyPlayers.add(player.getUUID());
             }
-            chunk.setUnsaved(true);
         }
     }
 
     @SubscribeEvent
+    public static void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (!(event.getPlayer() instanceof ServerPlayer)) return;
+
+        LevelAccessor levelAccessor = event.getLevel();
+        if (levelAccessor.isClientSide()) return;
+        if (!(levelAccessor instanceof ServerLevel serverLevel)) return;
+
+        BlockPos pos = event.getPos();
+        LevelChunk chunk = serverLevel.getChunkSource().getChunk(pos.getX() >> 4, pos.getZ() >> 4, false);
+        if (chunk == null) return;
+
+        ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
+        int packedPos = ChunkCozinessData.packPos(pos);
+
+        data.getPackedPositions().remove(packedPos);
+        chunk.setUnsaved(true);
+
+        ChunkPos brokenChunkPos = chunk.getPos();
+        int radius = FogRuleConfig.PLAYER_CHUNK_RADIUS.get();
+        for (ServerPlayer player : serverLevel.players()) {
+            ChunkPos playerChunkPos = player.chunkPosition();
+            int dx = Math.abs(brokenChunkPos.x - playerChunkPos.x);
+            int dz = Math.abs(brokenChunkPos.z - playerChunkPos.z);
+            if (dx <= radius && dz <= radius) {
+                dirtyPlayers.add(player.getUUID());
+            }
+        }
+
+        serverLevel.getServer().execute(() -> {
+            LevelChunk currentChunk = serverLevel.getChunkSource().getChunk(pos.getX() >> 4, pos.getZ() >> 4, false);
+            if (currentChunk != null) {
+                ChunkCozinessData currentData = currentChunk.getData(ChunkCozinessData.CHUNK_DATA);
+                recalculateCoziness(serverLevel, currentChunk, currentData);
+                currentChunk.setUnsaved(true);
+            }
+        });
+    }    @SubscribeEvent
     public static void onNeighborNotify(BlockEvent.NeighborNotifyEvent event) {
         if (event.getLevel().isClientSide() || !(event.getLevel() instanceof ServerLevel serverLevel)) return;
 
@@ -244,23 +271,17 @@ public class CozinessEngine {
     }
 
     @SubscribeEvent
-    public static void onPlayerTick(PlayerTickEvent.Post event) {
-        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide) {
-            dirtyPlayers.add(player);
-        }
-    }
-
-    @SubscribeEvent
     public static void onLevelTick(LevelTickEvent.Post event) {
         if (event.getLevel().isClientSide()) return;
         if (!(event.getLevel() instanceof ServerLevel serverLevel)) return;
 
         tickCounter++;
-        if (tickCounter >= 20) {
+        if (tickCounter >= 1) {
             tickCounter = 0;
             long currentTime = serverLevel.getGameTime();
-            for (ServerPlayer player : dirtyPlayers) {
-                if (player.level() == serverLevel) {
+            for (UUID uuid : dirtyPlayers) {
+                ServerPlayer player = (ServerPlayer) serverLevel.getPlayerByUUID(uuid);
+                if (player != null && player.level() == serverLevel) {
                     updatePlayerFog(player);
 
                     int px = player.blockPosition().getX() >> 4;
@@ -297,6 +318,29 @@ public class CozinessEngine {
         }
     }
 
+    @SubscribeEvent
+    public static void onPlayerTick(PlayerTickEvent.Post event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (player.level().isClientSide()) return;
+
+        UUID uuid = player.getUUID();
+        ChunkPos currentPos = player.chunkPosition();
+        ChunkPos lastPos = lastPlayerChunk.get(uuid);
+
+        if (lastPos == null || !lastPos.equals(currentPos)) {
+            dirtyPlayers.add(uuid);
+            lastPlayerChunk.put(uuid, currentPos);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        UUID uuid = event.getEntity().getUUID();
+        dirtyPlayers.remove(uuid);
+        lastPlayerChunk.remove(uuid);
+        playerClearanceMap.remove(uuid);
+    }
+
     private static void updatePlayerFog(ServerPlayer player) {
         int px = player.blockPosition().getX() >> 4;
         int pz = player.blockPosition().getZ() >> 4;
@@ -308,16 +352,28 @@ public class CozinessEngine {
             for (int dz = -radius; dz <= radius; dz++) {
                 ChunkPos cPos = new ChunkPos(px + dx, pz + dz);
                 Float coziness = loadedCoziness.get(cPos);
-                if (coziness != null && coziness > 0) {
+
+                if (coziness != null && coziness != 0.0f) {
                     double dist = Math.sqrt(dx * dx + dz * dz);
-                    double weight = Math.max(0, 1.0 - (dist / (radius + 1.0)));
-                    weightedSum += coziness * weight;
+                    double maxDist = radius + 1.0;
+
+                    if (dist < maxDist) {
+                        double linearFactor = 1.0 - (dist / maxDist);
+                        double weight = linearFactor * linearFactor;
+                        weightedSum += coziness * weight;
+                    }
                 }
             }
         }
 
-        float clearance = (float) (Math.pow(weightedSum, 0.6) * FogRuleConfig.CLEARANCE_MULTIPLIER.get());
-        clearance = Math.min(clearance, FogRuleConfig.MAX_CLEARANCE_RANGE.get().floatValue());
+        double finalSum;
+        if (weightedSum >= 0) {
+            finalSum = Math.pow(weightedSum, 0.75);
+        } else {
+            finalSum = weightedSum;
+        }
+
+        float clearance = (float) (finalSum * FogRuleConfig.CLEARANCE_MULTIPLIER.get());
 
         PacketDistributor.sendToPlayer(player, new ClearancePacket(clearance));
     }
@@ -357,7 +413,7 @@ public class CozinessEngine {
         int[] groupCounts = new int[compiledGroups.size()];
         for (int packed : data.getPackedPositions()) {
             BlockPos pos = ChunkCozinessData.unpackPos(packed, chunk.getPos().x, chunk.getPos().z);
-            BlockState state = level.getBlockState(pos);
+            BlockState state = chunk.getBlockState(pos);
             if (state.isAir()) {
                 toRemove.add(packed);
             } else {
@@ -376,6 +432,7 @@ public class CozinessEngine {
             data.getPackedPositions().removeAll(toRemove);
         }
         data.setCoziness(total);
+        data.setAbandonedCoziness(total);
         loadedCoziness.put(chunk.getPos(), total);
         chunk.setUnsaved(true);
     }

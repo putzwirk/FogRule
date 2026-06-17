@@ -11,13 +11,13 @@ public class FogRuleConfig {
             .defineInRange("fog.minFogDistance", 20.0, 1.0, 500.0);
 
     public static final ModConfigSpec.DoubleValue BLEND_SPEED = BUILDER
-            .defineInRange("fog.blendSpeed", 0.1, 0.000001, 1.0);
+            .defineInRange("fog.blendSpeed", 0.01, 0.000001, 1.0);
 
     public static final ModConfigSpec.IntValue PLAYER_CHUNK_RADIUS = BUILDER
             .defineInRange("fog.playerChunkRadius", 32, 1, 32);
 
     public static final ModConfigSpec.DoubleValue CLEARANCE_MULTIPLIER = BUILDER
-            .defineInRange("fog.clearanceMultiplier", 1.0, 0.1, 100.0);
+            .defineInRange("fog.clearanceMultiplier", 3.0, 0.1, 100.0);
 
     public static final ModConfigSpec.DoubleValue CLEARANCE_EFFECTIVENESS_EXPONENT = BUILDER
             .defineInRange("fog.clearanceEffectivenessExponent", 0.75, 0.1, 1.0);

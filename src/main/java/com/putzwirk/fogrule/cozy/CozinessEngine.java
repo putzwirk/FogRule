@@ -10,7 +10,6 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
@@ -21,6 +20,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
@@ -120,7 +120,6 @@ public class CozinessEngine {
         if (!(event.getChunk() instanceof LevelChunk chunk)) return;
 
         ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
-        setupSpawnChunk(chunk, data);
 
         IntOpenHashSet positions = CozyDatabase.loadPositions(chunk.getPos().x, chunk.getPos().z);
         data.getPackedPositions().clear();
@@ -134,31 +133,10 @@ public class CozinessEngine {
             long elapsedTicks = currentTime - oldLastVisited;
 
             if (elapsedTicks >= getDecayTriggerTicks() && !queuedDecayPositions.contains(chunk.getPos())) {
-                ServerPlayer closest = null;
-                double minDist = Double.MAX_VALUE;
-                for (ServerPlayer p : serverLevel.players()) {
-                    double d = p.blockPosition().distSqr(new BlockPos(chunk.getPos().getMiddleBlockX(), (int) p.getY(), chunk.getPos().getMiddleBlockZ()));
-                    if (d < minDist) {
-                        minDist = d;
-                        closest = p;
-                    }
-                }
-                if (closest != null && minDist < 65536) {
-                    closest.sendSystemMessage(Component.literal("§c[FogRule Debug] Chunk [" + chunk.getPos().x + ", " + chunk.getPos().z + "] LastVisitedTime: " + oldLastVisited + " | Elapsed: " + elapsedTicks + " ticks"));
-                }
-
                 pendingDecayQueue.add(new PendingDecay(chunk.getPos(), elapsedTicks, data.getAbandonedCoziness()));
                 queuedDecayPositions.add(chunk.getPos());
             }
         }
-    }
-
-    private static void setupSpawnChunk(LevelChunk chunk, ChunkCozinessData data) {
-        float spawnChunkCoziness = FogRuleConfig.SPAWN_CHUNK_COZINESS.get().floatValue();
-        if (spawnChunkCoziness == 0.0f) return;
-        if (chunk.getPos().x != 0 || chunk.getPos().z != 0) { return; }
-
-        data.setCoziness(spawnChunkCoziness);
     }
 
     @SubscribeEvent
@@ -204,6 +182,53 @@ public class CozinessEngine {
         }
     }
 
+    @SubscribeEvent
+    public static void onBlockInteract(PlayerInteractEvent.RightClickBlock event) {
+        if (event.getLevel().isClientSide() || !(event.getLevel() instanceof ServerLevel serverLevel)) return;
+
+        BlockPos pos = event.getPos();
+        BlockState originalState = serverLevel.getBlockState(pos);
+        boolean isFlowerPot = originalState.is(net.minecraft.world.level.block.Blocks.FLOWER_POT) ||
+                originalState.getBlock() instanceof net.minecraft.world.level.block.FlowerPotBlock;
+
+        if (!isFlowerPot) return;
+
+        LevelChunk chunk = serverLevel.getChunkSource().getChunk(pos.getX() >> 4, pos.getZ() >> 4, false);
+        if (chunk == null) return;
+
+        if (FogRuleConfig.SPAWN_CHUNK_COZINESS.get().floatValue() != 0.0f &&
+                chunk.getPos().x == 0 && chunk.getPos().z == 0) return;
+
+        ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
+
+        serverLevel.getServer().execute(() -> {
+            BlockState newState = serverLevel.getBlockState(pos);
+            int packedPos = ChunkCozinessData.packPos(pos);
+
+            if (!newState.equals(originalState)) {
+                boolean isEmptyPot = newState.is(net.minecraft.world.level.block.Blocks.FLOWER_POT);
+
+                if (!isEmptyPot && !newState.isAir()) {
+                    data.getPackedPositions().add(packedPos);
+                } else {
+                    data.getPackedPositions().remove(packedPos);
+                }
+
+                data.setLastVisitedTime(serverLevel.getGameTime());
+                recalculateCoziness(serverLevel, chunk, data);
+                chunk.setUnsaved(true);
+
+                int radius = FogRuleConfig.PLAYER_CHUNK_RADIUS.get();
+                for (ServerPlayer player : serverLevel.players()) {
+                    int dx = Math.abs(chunk.getPos().x - player.chunkPosition().x);
+                    int dz = Math.abs(chunk.getPos().z - player.chunkPosition().z);
+                    if (dx <= radius && dz <= radius) {
+                        dirtyPlayers.add(player.getUUID());
+                    }
+                }
+            }
+        });
+    }
     @SubscribeEvent
     public static void onBlockBreak(BlockEvent.BreakEvent event) {
         if (!(event.getPlayer() instanceof ServerPlayer)) return;
@@ -351,18 +376,29 @@ public class CozinessEngine {
     }
 
     private static void updatePlayerFog(ServerPlayer player) {
+        if (player == null) return;
+
         int px = player.blockPosition().getX() >> 4;
         int pz = player.blockPosition().getZ() >> 4;
         int radius = FogRuleConfig.PLAYER_CHUNK_RADIUS.get();
 
         double weightedSum = 0;
+        float spawnChunkCoziness = FogRuleConfig.SPAWN_CHUNK_COZINESS.get().floatValue();
 
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dz = -radius; dz <= radius; dz++) {
                 ChunkPos cPos = new ChunkPos(px + dx, pz + dz);
-                Float coziness = loadedCoziness.get(cPos);
 
-                if (coziness != null && coziness != 0.0f) {
+                // 1. FORCE OVERRIDE: If this is 0,0 and config is enabled, use the config value directly
+                float coziness;
+                if (spawnChunkCoziness != 0.0f && cPos.x == 0 && cPos.z == 0) {
+                    coziness = spawnChunkCoziness;
+                } else {
+                    Float loaded = loadedCoziness.get(cPos);
+                    coziness = (loaded != null) ? loaded : 0.0f;
+                }
+
+                if (coziness != 0.0f) {
                     double dist = Math.sqrt(dx * dx + dz * dz);
                     double maxDist = radius + 1.0;
 
@@ -449,9 +485,7 @@ public class CozinessEngine {
             String[] parts = line.trim().split("\\s+");
             if (parts.length < 2) continue;
             DiminishingGroup group = new DiminishingGroup();
-            for (int i = 0; i < parts.length - 1; i++) {
-                group.selectors.add(parts[i]);
-            }
+            group.selectors.addAll(Arrays.asList(parts).subList(0, parts.length - 1));
             try {
                 group.maxCount = Integer.parseInt(parts[parts.length - 1]);
                 compiledGroups.add(group);

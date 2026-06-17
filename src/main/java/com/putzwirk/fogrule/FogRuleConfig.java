@@ -14,7 +14,7 @@ public class FogRuleConfig {
             .defineInRange("fog.blendSpeed", 0.01, 0.000001, 1.0);
 
     public static final ModConfigSpec.IntValue PLAYER_CHUNK_RADIUS = BUILDER
-            .defineInRange("fog.playerChunkRadius", 32, 1, 32);
+            .defineInRange("fog.playerChunkRadius", 8, 1, 32);
 
     public static final ModConfigSpec.DoubleValue CLEARANCE_MULTIPLIER = BUILDER
             .defineInRange("fog.clearanceMultiplier", 3.0, 0.1, 100.0);

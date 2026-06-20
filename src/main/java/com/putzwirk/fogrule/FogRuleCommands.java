@@ -17,29 +17,26 @@ public class FogRuleCommands {
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
-
         dispatcher.register(Commands.literal("fogrule")
-            .requires(source -> source.hasPermission(2))
-                // Debug command
-            .then(Commands.literal("skipTime")
-                .then(Commands.argument("ticks", LongArgumentType.longArg(1L))
-                    .executes(context -> {
-                        CommandSourceStack source = context.getSource();
-                        if (source.getEntity() instanceof ServerPlayer player) {
-                            long ticksToSkip = LongArgumentType.getLong(context, "ticks");
-
-                            int affectedChunks = CozinessEngine.forceTimeSkipForPlayer(player, ticksToSkip);
-                            
-                            source.sendSuccess(() -> Component.literal(
-                                    "§a[FogRule] Simulated " + ticksToSkip + " ticks passing across " + affectedChunks + " chunks! Evaluating decay..."), true);
-                            return 1;
-                        } else {
-                            source.sendFailure(Component.literal("This command must be run by a player."));
-                            return 0;
-                        }
-                    })
+                .requires(source -> source.hasPermission(2))
+                .then(Commands.literal("skipTime")
+                        .then(Commands.argument("ticks", LongArgumentType.longArg(1L))
+                                .executes(context -> {
+                                    CommandSourceStack source = context.getSource();
+                                    if (source.getEntity() instanceof ServerPlayer player) {
+                                        long ticksToSkip = LongArgumentType.getLong(context, "ticks");
+                                        int affectedChunks = CozinessEngine.forceTimeSkipForPlayer(player, ticksToSkip);
+                                        source.sendSuccess(() -> Component.literal(
+                                                "§a[FogRule] Simulated "
+                                                        + ticksToSkip + " ticks passing across " + affectedChunks + " chunks! Evaluating decay..."), true);
+                                        return 1;
+                                    } else {
+                                        source.sendFailure(Component.literal("This command must be run by a player."));
+                                        return 0;
+                                    }
+                                })
+                        )
                 )
-            )
         );
     }
 }

@@ -94,19 +94,22 @@ public class CozinessEngine {
         int playerChunkZ = pos.getZ() >> 4;
         int chunksAltered = 0;
         long currentTime = world.getGameTime();
+        int radius = FogRuleConfig.PLAYER_CHUNK_RADIUS.get();
 
-        for (int dx = -4; dx <= 4; dx++) {
-            for (int dz = -4; dz <= 4; dz++) {
-                LevelChunk chunk = world.getChunkSource().getChunk(playerChunkX + dx, playerChunkZ + dz, false);
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                int cx = playerChunkX + dx;
+                int cz = playerChunkZ + dz;
+                LevelChunk chunk = world.getChunkSource().getChunk(cx, cz, false);
+                if (chunk == null) {
+                    chunk = world.getChunkSource().getChunk(cx, cz, true);
+                }
                 if (chunk == null) continue;
-
                 ChunkCozinessData data = chunk.getData(ChunkCozinessData.CHUNK_DATA);
                 if (data.getPackedPositions().isEmpty()) continue;
-
                 ChunkPos cPos = chunk.getPos();
                 long simulatedLastVisited = currentTime - simulatedTicksPassed;
                 data.setLastVisitedTime(simulatedLastVisited);
-
                 if (simulatedTicksPassed >= getDecayTriggerTicks() && !queuedDecayPositions.contains(cPos)) {
                     pendingDecayQueue.add(new PendingDecay(cPos, simulatedTicksPassed, data.getAbandonedCoziness()));
                     queuedDecayPositions.add(cPos);

@@ -10,6 +10,7 @@ import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
@@ -74,13 +75,16 @@ public class CozinessEngine {
         }
 
         Float clearance = playerClearanceMap.get(nearestPlayer.getUUID());
+
         if (clearance == null) return false;
 
         float minAllowedFog = FogRuleConfig.MIN_FOG_DISTANCE.get().floatValue();
         float activeClearance = Math.max(clearance, minAllowedFog);
 
         double dist = Math.sqrt(nearestDistSq);
-        return dist <= (activeClearance + 80.0f);
+
+
+        return dist <= (activeClearance + 24) || dist >= (activeClearance + 150);
     }
 
     public static int forceTimeSkipForPlayer(ServerPlayer player, long simulatedTicksPassed) {
@@ -415,7 +419,7 @@ public class CozinessEngine {
             weightedSum = Math.pow(weightedSum, FogRuleConfig.CLEARANCE_EFFECTIVENESS_EXPONENT.getAsDouble());
         }
         float clearance = (float) (weightedSum * FogRuleConfig.CLEARANCE_MULTIPLIER.get());
-
+        playerClearanceMap.put(player.getUUID(), clearance);
         PacketDistributor.sendToPlayer(player, new ClearancePacket(clearance));
     }
 

@@ -33,20 +33,8 @@ public class FogRuleSpawnHandler {
             return;
         }
 
-        if (level.getBrightness(LightLayer.SKY, pos) < 14) return;
-
-        ResourceLocation entityKey = BuiltInRegistries.ENTITY_TYPE.getKey(event.getEntity().getType());
-        String entityIdString = entityKey.toString();
-        List<? extends String> allowedMobs = FogRuleConfig.FOG_ALLOWED_MOBS.get();
-
-        if (level.isDay()) {
-            if (allowedMobs.contains(entityIdString)) {
-                event.setResult(MobSpawnEvent.PositionCheck.Result.SUCCEED);
-                event.getEntity().getPersistentData().putBoolean("FogRule_ImmuneToSun", true);
-            } else {
-                event.setResult(MobSpawnEvent.PositionCheck.Result.FAIL);
-            }
-        }
+        event.setResult(MobSpawnEvent.PositionCheck.Result.SUCCEED);
+        event.getEntity().getPersistentData().putBoolean("FogRule_ImmuneToSun", true);
     }
 
     @SubscribeEvent
@@ -65,21 +53,15 @@ public class FogRuleSpawnHandler {
 
         if (level.getBrightness(LightLayer.SKY, pos) < 14) return;
 
-        ResourceLocation entityKey = BuiltInRegistries.ENTITY_TYPE.getKey(event.getEntityType());
-        String entityIdString = entityKey.toString();
-        List<? extends String> allowedMobs = FogRuleConfig.FOG_ALLOWED_MOBS.get();
-
         if (level.isDay()) {
-            if (allowedMobs.contains(entityIdString)) {
-                int blockLightLimit = level.dimensionType().monsterSpawnBlockLightLimit();
-                if (level.getBrightness(LightLayer.BLOCK, pos) <= blockLightLimit) {
-                    event.setResult(MobSpawnEvent.SpawnPlacementCheck.Result.SUCCEED);
-                } else {
-                    event.setResult(MobSpawnEvent.SpawnPlacementCheck.Result.FAIL);
-                }
+            int blockLightLimit = level.dimensionType().monsterSpawnBlockLightLimit();
+            if (level.getBrightness(LightLayer.BLOCK, pos) <= blockLightLimit) {
+                event.setResult(MobSpawnEvent.SpawnPlacementCheck.Result.SUCCEED);
             } else {
                 event.setResult(MobSpawnEvent.SpawnPlacementCheck.Result.FAIL);
             }
+        } else {
+            event.setResult(MobSpawnEvent.SpawnPlacementCheck.Result.FAIL);
         }
     }
 }

@@ -93,19 +93,6 @@ public class FogRuleConfig {
                     o -> o instanceof String s && isValidDecayEntry(s)
             );
 
-    public static final ModConfigSpec.ConfigValue<List<? extends String>> FOG_ALLOWED_MOBS = BUILDER
-            .defineListAllowEmpty(
-                    "mobs.fogAllowedMobs",
-                    List.of(
-                            "minecraft:zombie",
-                            "minecraft:skeleton",
-                            "minecraft:spider",
-                            "minecraft:creeper",
-                            "minecraft:husk"
-                    ),
-                    o -> o instanceof String s && s.contains(":")
-            );
-
     static final ModConfigSpec SPEC = BUILDER.build();
 
     private static boolean isValidCozinessEntry(String s) {
